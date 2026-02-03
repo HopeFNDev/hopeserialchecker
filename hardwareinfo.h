@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <wbemidl.h>
+#include <comdef.h>
+
+#pragma comment(lib, "wbemuuid.lib")
 
 struct hardwareitem {
     std::wstring category;
@@ -49,5 +53,8 @@ private:
     std::wstring extractserialfrominstance(const std::wstring& instanceid, bool isusbstor);
     
     std::wstring readregistrystring(HKEY hkey, const std::wstring& subkey, const std::wstring& valuename);
+    std::wstring readregistrystringraw(HKEY hkey, const std::wstring& subkey, const std::wstring& valuename);
     DWORD readregistrydword(HKEY hkey, const std::wstring& subkey, const std::wstring& valuename);
+    
+    std::wstring getwmiproperty(const std::wstring& wmiclass, const std::wstring& property);
 };

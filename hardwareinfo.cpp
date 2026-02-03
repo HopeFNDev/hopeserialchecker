@@ -47,11 +47,8 @@ std::vector<hardwareinfo::smbiosstructure> hardwareinfo::parsesmbiosstructures(c
         structure.type = type;
         structure.length = length;
         
-        int datalength = length - 4;
-        if (datalength > 0) {
-            structure.data.resize(datalength);
-            memcpy(structure.data.data(), &data[offset + 4], datalength);
-        }
+        structure.data.resize(length);
+        memcpy(structure.data.data(), &data[offset], length);
         
         size_t stringoffset = offset + length;
         while (stringoffset < end - 1) {
@@ -89,13 +86,14 @@ std::string hardwareinfo::getsmbiosstring(const smbiosstructure& structure, BYTE
 }
 
 std::string hardwareinfo::getsmbiosstringat(const smbiosstructure& structure, int dataindex) {
-    if (structure.data.size() <= static_cast<size_t>(dataindex)) return "n/a";
-    return getsmbiosstring(structure, structure.data[dataindex]);
+    int actualoffset = 4 + dataindex;
+    if (structure.data.size() <= static_cast<size_t>(actualoffset)) return "n/a";
+    return getsmbiosstring(structure, structure.data[actualoffset]);
 }
 
 std::string hardwareinfo::formatuuid(const BYTE* uuid) {
     std::ostringstream oss;
-    oss << std::hex << std::setfill('0');
+    oss << std::hex << std::uppercase << std::setfill('0');
     oss << std::setw(2) << (int)uuid[0] << std::setw(2) << (int)uuid[1]
         << std::setw(2) << (int)uuid[2] << std::setw(2) << (int)uuid[3] << "-"
         << std::setw(2) << (int)uuid[4] << std::setw(2) << (int)uuid[5] << "-"
@@ -124,10 +122,6 @@ std::vector<hardwareitem> hardwareinfo::getbiosinfo() {
             std::string version = getsmbiosstringat(s, 1);
             std::string releasedate = getsmbiosstringat(s, 2);
             
-            std::transform(vendor.begin(), vendor.end(), vendor.begin(), ::tolower);
-            std::transform(version.begin(), version.end(), version.begin(), ::tolower);
-            std::transform(releasedate.begin(), releasedate.end(), releasedate.begin(), ::tolower);
-            
             items.push_back({L"bios", L"vendor", std::wstring(vendor.begin(), vendor.end()), L""});
             items.push_back({L"bios", L"version", std::wstring(version.begin(), version.end()), L""});
             items.push_back({L"bios", L"releasedate", std::wstring(releasedate.begin(), releasedate.end()), L""});
@@ -141,18 +135,33 @@ std::vector<hardwareitem> hardwareinfo::getbiosinfo() {
             std::string version = getsmbiosstringat(s, 2);
             std::string serialnumber = getsmbiosstringat(s, 3);
             
-            std::transform(manufacturer.begin(), manufacturer.end(), manufacturer.begin(), ::tolower);
-            std::transform(productname.begin(), productname.end(), productname.begin(), ::tolower);
-            std::transform(version.begin(), version.end(), version.begin(), ::tolower);
-            std::transform(serialnumber.begin(), serialnumber.end(), serialnumber.begin(), ::tolower);
-            
             items.push_back({L"systemproduct", L"manufacturer", std::wstring(manufacturer.begin(), manufacturer.end()), L""});
             items.push_back({L"systemproduct", L"productname", std::wstring(productname.begin(), productname.end()), L""});
             items.push_back({L"systemproduct", L"version", std::wstring(version.begin(), version.end()), L""});
-            items.push_back({L"systemproduct", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+            items.push_back({L"systemproduct", L"version", std::wstring(version.begin(), version.end()), L""});
             
-            if (s.data.size() >= 20) {
-                std::string uuid = formatuuid(&s.data[4]);
+            std::string serialcheck = serialnumber;
+            std::transform(serialcheck.begin(), serialcheck.end(), serialcheck.begin(), ::tolower);
+            
+            bool validserial = true;
+            if (serialnumber.empty() || serialcheck == "n/a" || serialcheck == "none" || 
+                serialcheck.find("o.e.m.") != std::string::npos || serialcheck.find("default") != std::string::npos) {
+                validserial = false;
+            }
+            
+            if (!validserial) {
+                 std::wstring wmiserial = getwmiproperty(L"Win32_ComputerSystemProduct", L"IdentifyingNumber");
+                 if (!wmiserial.empty()) {
+                     items.push_back({L"systemproduct", L"serialnumber", wmiserial, L""});
+                 } else {
+                     items.push_back({L"systemproduct", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+                 }
+            } else {
+                items.push_back({L"systemproduct", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+            }
+            
+            if (s.data.size() >= 24) {
+                std::string uuid = formatuuid(&s.data[8]);
                 items.push_back({L"systemproduct", L"uuid", std::wstring(uuid.begin(), uuid.end()), L""});
             }
         }
@@ -165,15 +174,39 @@ std::vector<hardwareitem> hardwareinfo::getbiosinfo() {
             std::string version = getsmbiosstringat(s, 2);
             std::string serialnumber = getsmbiosstringat(s, 3);
             
-            std::transform(manufacturer.begin(), manufacturer.end(), manufacturer.begin(), ::tolower);
-            std::transform(product.begin(), product.end(), product.begin(), ::tolower);
-            std::transform(version.begin(), version.end(), version.begin(), ::tolower);
-            std::transform(serialnumber.begin(), serialnumber.end(), serialnumber.begin(), ::tolower);
-            
             items.push_back({L"baseboard", L"manufacturer", std::wstring(manufacturer.begin(), manufacturer.end()), L""});
             items.push_back({L"baseboard", L"product", std::wstring(product.begin(), product.end()), L""});
             items.push_back({L"baseboard", L"version", std::wstring(version.begin(), version.end()), L""});
-            items.push_back({L"baseboard", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+            
+            std::string serialcheck = serialnumber;
+            std::transform(serialcheck.begin(), serialcheck.end(), serialcheck.begin(), ::tolower);
+            
+            bool validserial = true;
+            if (serialnumber.empty() || serialcheck == "n/a" || serialcheck == "none" || 
+                serialcheck.find("o.e.m.") != std::string::npos || serialcheck.find("default") != std::string::npos) {
+                validserial = false;
+            }
+            
+            if (!validserial) {
+                const std::wstring bbkey = L"HARDWARE\\DESCRIPTION\\System\\BIOS";
+                std::wstring regserial = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardSerialNumber");
+                if (regserial == L"n/a" || regserial.empty()) {
+                    regserial = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardSerial");
+                }
+                
+                if (regserial != L"n/a" && !regserial.empty()) {
+                    items.push_back({L"baseboard", L"serialnumber", regserial, L""});
+                } else {
+                     std::wstring wmiserial = getwmiproperty(L"Win32_BaseBoard", L"SerialNumber");
+                     if (!wmiserial.empty()) {
+                         items.push_back({L"baseboard", L"serialnumber", wmiserial, L""});
+                     } else {
+                         items.push_back({L"baseboard", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+                     }
+                }
+            } else {
+                items.push_back({L"baseboard", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
+            }
         }
     }
     
@@ -184,11 +217,6 @@ std::vector<hardwareitem> hardwareinfo::getbiosinfo() {
             std::string serialnumber = getsmbiosstringat(s, 3);
             std::string assettag = getsmbiosstringat(s, 4);
             
-            std::transform(manufacturer.begin(), manufacturer.end(), manufacturer.begin(), ::tolower);
-            std::transform(version.begin(), version.end(), version.begin(), ::tolower);
-            std::transform(serialnumber.begin(), serialnumber.end(), serialnumber.begin(), ::tolower);
-            std::transform(assettag.begin(), assettag.end(), assettag.begin(), ::tolower);
-            
             items.push_back({L"chassis", L"manufacturer", std::wstring(manufacturer.begin(), manufacturer.end()), L""});
             items.push_back({L"chassis", L"version", std::wstring(version.begin(), version.end()), L""});
             items.push_back({L"chassis", L"serialnumber", std::wstring(serialnumber.begin(), serialnumber.end()), L""});
@@ -198,6 +226,51 @@ std::vector<hardwareitem> hardwareinfo::getbiosinfo() {
                 items.push_back({L"chassis", L"type", std::to_wstring(s.data[1]), L""});
             }
         }
+    }
+    
+    bool hasbaseboard = false;
+    bool hassystemproduct = false;
+    for (const auto& item : items) {
+        if (item.category == L"baseboard") hasbaseboard = true;
+        if (item.category == L"systemproduct") hassystemproduct = true;
+    }
+    
+    if (!hasbaseboard) {
+        const std::wstring bbkey = L"HARDWARE\\DESCRIPTION\\System\\BIOS";
+        std::wstring manufacturer = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardManufacturer");
+        std::wstring product = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardProduct");
+        std::wstring version = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardVersion");
+        std::wstring serial = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardSerialNumber");
+        
+        if (serial == L"n/a" || serial.empty()) {
+            serial = readregistrystringraw(HKEY_LOCAL_MACHINE, bbkey, L"BaseBoardSerial");
+        }
+        
+        if (serial == L"n/a" || serial.empty()) {
+             serial = getwmiproperty(L"Win32_BaseBoard", L"SerialNumber");
+        }
+        
+        items.push_back({L"baseboard", L"manufacturer", manufacturer, L""});
+        items.push_back({L"baseboard", L"product", product, L""});
+        items.push_back({L"baseboard", L"version", version, L""});
+        items.push_back({L"baseboard", L"serialnumber", serial, L""});
+    }
+    
+    if (!hassystemproduct) {
+        const std::wstring syskey = L"HARDWARE\\DESCRIPTION\\System\\BIOS";
+        std::wstring manufacturer = readregistrystringraw(HKEY_LOCAL_MACHINE, syskey, L"SystemManufacturer");
+        std::wstring productname = readregistrystringraw(HKEY_LOCAL_MACHINE, syskey, L"SystemProductName");
+        std::wstring version = readregistrystringraw(HKEY_LOCAL_MACHINE, syskey, L"SystemVersion");
+        std::wstring serial = readregistrystringraw(HKEY_LOCAL_MACHINE, syskey, L"SystemSerialNumber");
+        
+        if (serial == L"n/a" || serial.empty()) {
+             serial = getwmiproperty(L"Win32_ComputerSystemProduct", L"IdentifyingNumber");
+        }
+        
+        items.push_back({L"systemproduct", L"manufacturer", manufacturer, L""});
+        items.push_back({L"systemproduct", L"productname", productname, L""});
+        items.push_back({L"systemproduct", L"version", version, L""});
+        items.push_back({L"systemproduct", L"serialnumber", serial, L""});
     }
     
     return items;
@@ -227,7 +300,38 @@ std::wstring hardwareinfo::readregistrystring(HKEY hkey, const std::wstring& sub
     RegCloseKey(key);
     
     std::wstring result(buffer.data());
-    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    size_t start = result.find_first_not_of(L" \t\r\n");
+    size_t end = result.find_last_not_of(L" \t\r\n");
+    if (start != std::wstring::npos && end != std::wstring::npos) {
+        return result.substr(start, end - start + 1);
+    }
+    return result;
+}
+
+std::wstring hardwareinfo::readregistrystringraw(HKEY hkey, const std::wstring& subkey, const std::wstring& valuename) {
+    HKEY key;
+    if (RegOpenKeyExW(hkey, subkey.c_str(), 0, KEY_READ, &key) != ERROR_SUCCESS) {
+        return L"n/a";
+    }
+    
+    DWORD type = 0;
+    DWORD size = 0;
+    RegQueryValueExW(key, valuename.c_str(), nullptr, &type, nullptr, &size);
+    
+    if (size == 0 || (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        RegCloseKey(key);
+        return L"n/a";
+    }
+    
+    std::vector<wchar_t> buffer(size / sizeof(wchar_t) + 1);
+    if (RegQueryValueExW(key, valuename.c_str(), nullptr, &type, reinterpret_cast<LPBYTE>(buffer.data()), &size) != ERROR_SUCCESS) {
+        RegCloseKey(key);
+        return L"n/a";
+    }
+    
+    RegCloseKey(key);
+    
+    std::wstring result(buffer.data());
     size_t start = result.find_first_not_of(L" \t\r\n");
     size_t end = result.find_last_not_of(L" \t\r\n");
     if (start != std::wstring::npos && end != std::wstring::npos) {
@@ -265,7 +369,7 @@ std::vector<hardwareitem> hardwareinfo::getprocessorinfo() {
     
     DWORD mhz = readregistrydword(HKEY_LOCAL_MACHINE, cpukey, L"~MHz");
     if (mhz > 0) {
-        items.push_back({L"cpu", L"mhz", std::to_wstring(mhz), L"clock speed in mhz"});
+        items.push_back({L"cpu", L"mhz", std::to_wstring(mhz), L""});
     }
     
     return items;
@@ -321,7 +425,7 @@ std::wstring hardwareinfo::getdiskserial(HANDLE handle) {
     if (descriptor->SerialNumberOffset > 0 && descriptor->SerialNumberOffset < bytesreturned) {
         const char* serial = reinterpret_cast<const char*>(buffer.data() + descriptor->SerialNumberOffset);
         std::string s(serial);
-        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        std::transform(s.begin(), s.end(), s.begin(), ::toupper);
         size_t start = s.find_first_not_of(" \t");
         size_t end = s.find_last_not_of(" \t");
         if (start != std::string::npos && end != std::string::npos) {
@@ -602,7 +706,7 @@ std::vector<hardwareitem> hardwareinfo::getmonitorinfo() {
                         std::wstring serial = getmonitorserialfromedid(edid.data(), edidsize);
                         if (!serial.empty()) {
                             std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-                            std::transform(serial.begin(), serial.end(), serial.begin(), ::tolower);
+                            std::transform(serial.begin(), serial.end(), serial.begin(), ::toupper);
                             std::wstring inst(instanceid);
                             std::transform(inst.begin(), inst.end(), inst.begin(), ::tolower);
                             items.push_back({L"monitor", name, serial, L"instance: " + inst});
@@ -716,7 +820,7 @@ std::vector<hardwareitem> hardwareinfo::getusbdevices() {
         
         bool isusbstor = (_wcsicmp(enumname.c_str(), L"USBSTOR") == 0);
         std::wstring serial = extractserialfrominstance(instanceid, isusbstor);
-        std::transform(serial.begin(), serial.end(), serial.begin(), ::tolower);
+        std::transform(serial.begin(), serial.end(), serial.begin(), ::toupper);
         
         items.push_back({L"usb", wdevicename, serial.empty() ? L"" : serial, L""});
     }
@@ -811,4 +915,84 @@ std::vector<hardwareitem> hardwareinfo::getarptable() {
     }
     
     return items;
+}
+
+std::wstring hardwareinfo::getwmiproperty(const std::wstring& wmiclass, const std::wstring& property) {
+    std::wstring result = L"";
+    
+    HRESULT hres;
+    hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres) && hres != RPC_E_CHANGED_MODE) {
+        return L"";
+    }
+    
+    hres = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
+    
+    IWbemLocator *ploc = NULL;
+    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID *)&ploc);
+    
+    if (FAILED(hres)) {
+        CoUninitialize();
+        return L"";
+    }
+    
+    IWbemServices *psvc = NULL;
+    hres = ploc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), NULL, NULL, 0, NULL, 0, 0, &psvc);
+    
+    if (FAILED(hres)) {
+        ploc->Release();
+        CoUninitialize();
+        return L"";
+    }
+    
+    hres = CoSetProxyBlanket(psvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+    
+    if (FAILED(hres)) {
+        psvc->Release();
+        ploc->Release();
+        CoUninitialize();
+        return L"";
+    }
+    
+    IEnumWbemClassObject* penumerator = NULL;
+    std::wstring query = L"SELECT " + property + L" FROM " + wmiclass;
+    hres = psvc->ExecQuery(bstr_t("WQL"), bstr_t(query.c_str()), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &penumerator);
+    
+    if (FAILED(hres)) {
+        psvc->Release();
+        ploc->Release();
+        CoUninitialize();
+        return L"";
+    }
+    
+    IWbemClassObject *pcls = NULL;
+    ULONG ureturn = 0;
+    
+    while (penumerator) {
+        HRESULT hr = penumerator->Next(WBEM_INFINITE, 1, &pcls, &ureturn);
+        if (0 == ureturn) {
+            break;
+        }
+        
+        VARIANT vtprop;
+        hr = pcls->Get(property.c_str(), 0, &vtprop, 0, 0);
+        if (SUCCEEDED(hr)) {
+            if (vtprop.vt == VT_BSTR) {
+                result = std::wstring(vtprop.bstrVal, SysStringLen(vtprop.bstrVal));
+            } else if (vtprop.vt == VT_I4) {
+                 result = std::to_wstring(vtprop.intVal);
+            }
+            VariantClear(&vtprop);
+        }
+        
+        pcls->Release();
+        if (!result.empty()) break;
+    }
+    
+    psvc->Release();
+    ploc->Release();
+    if (penumerator) penumerator->Release();
+    CoUninitialize();
+    
+    return result;
 }

@@ -30,7 +30,7 @@ void setupconsole() {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     
-    SetConsoleTitleW(L"hope's serial checker");
+    SetConsoleTitleW(L"");
     
     HWND consolewindow = GetConsoleWindow();
     if (consolewindow) {
@@ -38,10 +38,10 @@ void setupconsole() {
         style &= ~(WS_MAXIMIZEBOX | WS_SIZEBOX);
         SetWindowLong(consolewindow, GWL_STYLE, style);
         
-        SMALL_RECT windowsize = {0, 0, 99, 34};
+        SMALL_RECT windowsize = {0, 0, 89, 29};
         SetConsoleWindowInfo(hout, TRUE, &windowsize);
         
-        COORD buffersize = {100, 300};
+        COORD buffersize = {90, 300};
         SetConsoleScreenBufferSize(hout, buffersize);
     }
 }
@@ -60,14 +60,7 @@ std::string widetoutf8(const std::wstring& wide) {
 }
 
 void printheader() {
-    std::cout << R"(
-  _   _                  _       ____            _       _    ____ _               _             
- | | | | ___  _ __   ___( )___  / ___|  ___ _ __(_) __ _| |  / ___| |__   ___  ___| | _____ _ __ 
- | |_| |/ _ \| '_ \ / _ \// __| \___ \ / _ \ '__| |/ _` | | | |   | '_ \ / _ \/ __| |/ / _ \ '__|
- |  _  | (_) | |_) |  __/ \__ \  ___) |  __/ |  | | (_| | | | |___| | | |  __/ (__|   <  __/ |   
- |_| |_|\___/| .__/ \___| |___/ |____/ \___|_|  |_|\__,_|_|  \____|_| |_|\___|\___|_|\_\___|_|   
-             |_|                                                                                  
-)" << std::endl;
+    std::cout << "  hope serial checker" << std::endl;
 }
 
 void printmainmenu() {
@@ -79,7 +72,7 @@ void printmainmenu() {
     std::cout << std::endl;
     
     std::cout << "  ______________________________________ " << std::endl;
-    std::cout << "  |  [1] bios / system information     |" << std::endl;
+    std::cout << "  |  [1] motherboard information       |" << std::endl;
     std::cout << "  |  [2] cpu information               |" << std::endl;
     std::cout << "  |  [3] disk information              |" << std::endl;
     std::cout << "  |  [4] gpu information               |" << std::endl;
